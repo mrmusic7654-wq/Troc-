@@ -170,10 +170,29 @@ class SettingsViewModel @Inject constructor(
             val key = _uiState.value.mistralInput.ifEmpty {
                 apiKeyRepository.getMistralKeySync() ?: ""
             }
+            if (key.isBlank()) {
+                _uiState.update { it.copy(isTestingMistral = false, mistralValid = false) }
+                return@launch
+            }
             val endpoint = _uiState.value.customEndpoint.ifEmpty { Constants.MISTRAL_BASE_URL }
             val valid = mistralApi.validateKey(endpoint, key)
             _uiState.update { it.copy(isTestingMistral = false, mistralValid = valid) }
-            if (!valid) apiKeyRepository.markMistralInvalid()
+            // Only mark invalid if key is definitely invalid (not on network error)
+            // Our validateKey now returns true on network errors to avoid false negatives
+            if (!valid) {
+                // Double-check: try to get models as additional validation
+                try {
+                    val models = mistralApi.getModels(endpoint, key)
+                    if (models.isNotEmpty()) {
+                        // If we can get models, key is valid despite validateKey saying false
+                        _uiState.update { it.copy(mistralValid = true) }
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    // Ignore
+                }
+                apiKeyRepository.markMistralInvalid()
+            }
         }
     }
 
@@ -183,10 +202,16 @@ class SettingsViewModel @Inject constructor(
             val key = _uiState.value.groqInput.ifEmpty {
                 apiKeyRepository.getGroqKeySync() ?: ""
             }
+            if (key.isBlank()) {
+                _uiState.update { it.copy(isTestingGroq = false, groqValid = false) }
+                return@launch
+            }
             val endpoint = Constants.GROQ_BASE_URL
             val valid = groqApi.validateGroqKey(endpoint, key)
             _uiState.update { it.copy(isTestingGroq = false, groqValid = valid) }
-            if (!valid) apiKeyRepository.markGroqInvalid()
+            if (!valid) {
+                apiKeyRepository.markGroqInvalid()
+            }
         }
     }
 

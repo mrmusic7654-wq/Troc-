@@ -68,56 +68,93 @@ fun HomeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Brush.linearGradient(listOf(PrimaryPurple, SecondaryCyan))),
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(PrimaryPurple, PrimaryGradientEnd, SecondaryCyan),
+                                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                                        end = androidx.compose.ui.geometry.Offset(32f, 32f)
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("T", color = Color.White, style = MaterialTheme.typography.titleMedium)
+                            Text("T", color = Color.White, style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Black))
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Troc", style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Troc", style = MaterialTheme.typography.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                            if (state.isAgentMode) {
+                                Text(
+                                    "Autonomous Agent • Active",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                                    color = PrimaryPurple
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {
-                    // Agent Mode toggle
-                    SegmentedToggle(
-                        isAgentMode = state.isAgentMode,
-                        onToggle = { viewModel.toggleAgentMode() }
-                    )
-                    IconButton(onClick = onNavigateToVoice) {
-                        SmallVoiceOrbIcon(isActive = false)
+                    // Refined Agent Mode toggle - more prominent
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (state.isAgentMode) PrimaryPurple.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = !state.isAgentMode,
+                                onClick = { if (state.isAgentMode) viewModel.toggleAgentMode() },
+                                label = { Text("💬", style = MaterialTheme.typography.labelSmall) },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.height(28.dp)
+                            )
+                            FilterChip(
+                                selected = state.isAgentMode,
+                                onClick = { if (!state.isAgentMode) viewModel.toggleAgentMode() },
+                                label = { Text("🤖 Auto", style = MaterialTheme.typography.labelSmall) },
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.height(28.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryPurple,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
                     }
-                    IconButton(onClick = { viewModel.newChat() }) {
-                        Icon(Icons.Default.Add, contentDescription = "New chat")
+                    IconButton(onClick = onNavigateToVoice, modifier = Modifier.size(36.dp)) {
+                        SmallVoiceOrbIcon(isActive = state.isRecording)
                     }
-                    IconButton(onClick = onNavigateToHistory) {
-                        Icon(Icons.Default.History, contentDescription = "History")
+                    IconButton(onClick = { viewModel.newChat() }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = "New chat", modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    IconButton(onClick = onNavigateToHistory, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.History, contentDescription = "History", modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = onNavigateToSandbox) {
-                        Icon(Icons.Default.Science, contentDescription = "Sandbox")
+                    IconButton(onClick = onNavigateToSettings, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(20.dp))
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.95f)
+                )
             )
         },
         bottomBar = {
             Column {
-                // Agent Mode panel
+                // Automatic Agent Mode panel - refined
                 AnimatedVisibility(
                     visible = state.isAgentMode,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut()
+                    enter = expandVertically(spring(stiffness = Spring.StiffnessMedium)) + fadeIn(),
+                    exit = shrinkVertically(spring(stiffness = Spring.StiffnessMedium)) + fadeOut()
                 ) {
-                    AgentModePanel(
-                        steps = state.workflowSteps,
-                        onAddStep = { viewModel.addWorkflowStep() },
-                        onUpdateStep = { idx, step -> viewModel.updateWorkflowStep(idx, step) },
-                        onRemoveStep = { idx -> viewModel.removeWorkflowStep(idx) },
-                        onExecute = { viewModel.executeWorkflow() }
+                    AutomaticAgentPanel(
+                        isExecuting = state.isLoading,
+                        activeTools = state.activeToolCalls.size,
+                        onDisable = { viewModel.toggleAgentMode() }
                     )
                 }
 
@@ -424,32 +461,108 @@ fun HomeScreen(
 
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (state.messages.isEmpty()) {
-                // Empty state
+                // Refined empty state with better design
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
+                    // Animated logo with gradient
                     Box(
-                        modifier = Modifier.size(80.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Brush.linearGradient(listOf(PrimaryPurple, SecondaryCyan))),
+                        modifier = Modifier
+                            .size(88.dp)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(PrimaryPurple, PrimaryGradientEnd, SecondaryCyan),
+                                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                                    end = androidx.compose.ui.geometry.Offset(88f, 88f)
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("T", color = Color.White, style = MaterialTheme.typography.displayLarge)
+                        Text(
+                            "T",
+                            color = Color.White,
+                            style = MaterialTheme.typography.displayMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Black
+                            )
+                        )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("How can I help you today?", style = MaterialTheme.typography.titleLarge)
-                    Spacer(modifier = Modifier.height(24.dp))
-                    // 2x2 grid of suggestion cards
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Text(
+                        "How can I help you today?",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        if (state.isAgentMode) "Autonomous agent ready • I plan and execute automatically"
+                        else "Ask anything or switch to Agent for autonomous tasks",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(28.dp))
+                    // Refined 2x2 grid with better cards
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            SuggestionCard("Run Python code", "Execute code in sandbox") { viewModel.updateInput("Run this Python code: ") }
-                            SuggestionCard("Analyze a CSV", "Upload and analyze data") { filePicker.launch("text/*") }
+                            SuggestionCard(
+                                icon = "🐍",
+                                title = "Run Python",
+                                subtitle = "Code • Analyze • Chart",
+                                isAgent = state.isAgentMode
+                            ) {
+                                if (state.isAgentMode) viewModel.updateInput("Write and run Python code to analyze data and create visualizations")
+                                else viewModel.updateInput("Run this Python code: ")
+                            }
+                            SuggestionCard(
+                                icon = "📊",
+                                title = "Analyze Data",
+                                subtitle = "CSV • Stats • Insights",
+                                isAgent = state.isAgentMode
+                            ) { filePicker.launch("text/*") }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            SuggestionCard("Explain quantum", "Deep dive topic") { viewModel.updateInput("Explain quantum computing") }
-                            SuggestionCard("Voice chat", "Talk hands-free") { onNavigateToVoice() }
+                            SuggestionCard(
+                                icon = "🌐",
+                                title = "Web Search",
+                                subtitle = "Real-time • Cited",
+                                isAgent = state.isAgentMode
+                            ) {
+                                viewModel.setWebSearchMode(true)
+                                viewModel.updateInput("Search web for latest: ")
+                            }
+                            SuggestionCard(
+                                icon = "🎙️",
+                                title = "Voice Chat",
+                                subtitle = "Hands-free • Natural",
+                                isAgent = false
+                            ) { onNavigateToVoice() }
+                        }
+                        if (state.isAgentMode) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                SuggestionCard(
+                                    icon = "🤖",
+                                    title = "Autonomous Task",
+                                    subtitle = "Plan • Execute • Report",
+                                    isAgent = true,
+                                    isHighlighted = true
+                                ) {
+                                    viewModel.updateInput("I need you to autonomously research, analyze, and create a report about: ")
+                                }
+                                SuggestionCard(
+                                    icon = "⚡",
+                                    title = "Multi-step Workflow",
+                                    subtitle = "Auto chain tools",
+                                    isAgent = true
+                                ) {
+                                    viewModel.updateInput("Create a complete workflow: search web, analyze data, write code, and generate report for: ")
+                                }
+                            }
                         }
                     }
                 }
@@ -534,17 +647,181 @@ fun SegmentedToggle(isAgentMode: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-fun SuggestionCard(title: String, subtitle: String, onClick: () -> Unit) {
+fun SuggestionCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    icon: String = "✨",
+    isAgent: Boolean = false,
+    isHighlighted: Boolean = false
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.width(160.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isHighlighted -> PrimaryPurple.copy(alpha = 0.15f)
+                isAgent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+        border = if (isHighlighted) androidx.compose.foundation.BorderStroke(1.dp, PrimaryPurple.copy(alpha = 0.3f)) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isHighlighted) 2.dp else 0.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(icon, style = MaterialTheme.typography.titleSmall)
+                if (isAgent) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        color = PrimaryPurple.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            "AUTO",
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = androidx.compose.ui.unit.TextUnit(8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = PrimaryPurple
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
+    }
+}
+
+@Composable
+fun AutomaticAgentPanel(
+    isExecuting: Boolean,
+    activeTools: Int,
+    onDisable: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "agent")
+    val shimmer by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmer"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                PrimaryPurple.copy(alpha = shimmer),
+                                SecondaryCyan.copy(alpha = 0.8f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isExecuting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Agent Mode • Autonomous",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        color = SuccessGreen.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            if (isExecuting) "EXECUTING" else "READY",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = if (isExecuting) PrimaryPurple else SuccessGreen
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    if (isExecuting && activeTools > 0) {
+                        "Running $activeTools tool${if (activeTools > 1) "s" else ""} autonomously • AI is planning and executing"
+                    } else if (isExecuting) {
+                        "AI is thinking and planning workflow automatically..."
+                    } else {
+                        "AI will automatically plan, write code, search web, and execute tasks"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                    maxLines = 2
+                )
+            }
+
+            IconButton(
+                onClick = onDisable,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "Disable agent",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
     }
 }
@@ -557,52 +834,88 @@ fun AgentModePanel(
     onRemoveStep: (Int) -> Unit,
     onExecute: () -> Unit
 ) {
+    // Kept for advanced users - now collapsible
+    var isAdvancedExpanded by remember { mutableStateOf(false) }
+
     Card(
-        modifier = Modifier.fillMaxWidth().padding(12.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Agent Workflow", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                IconButton(onClick = onAddStep, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = "Add step", modifier = Modifier.size(18.dp))
-                }
-                Button(onClick = onExecute, modifier = Modifier.height(32.dp), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    Text("▶️ Execute", style = MaterialTheme.typography.labelSmall)
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Advanced Workflow Builder",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(
+                    onClick = { isAdvancedExpanded = !isAdvancedExpanded },
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Text(if (isAdvancedExpanded) "Hide" else "Show", style = MaterialTheme.typography.labelSmall)
+                    Icon(
+                        if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
 
-            if (steps.isEmpty()) {
-                Text("Add steps to build a multi-tool workflow", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    steps.forEachIndexed { index, step ->
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Tool dropdown (simplified)
-                            OutlinedTextField(
-                                value = step.tool.name,
-                                onValueChange = { /* dropdown would update */ },
-                                modifier = Modifier.width(80.dp),
-                                label = { Text("Tool", style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = step.inputTemplate,
-                                onValueChange = { onUpdateStep(index, step.copy(inputTemplate = it)) },
-                                modifier = Modifier.weight(1f),
-                                label = { Text("Input (use {{var}})", style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = step.outputVarName,
-                                onValueChange = { onUpdateStep(index, step.copy(outputVarName = it)) },
-                                modifier = Modifier.width(90.dp),
-                                label = { Text("Output var", style = MaterialTheme.typography.labelSmall) },
-                                singleLine = true
-                            )
-                            IconButton(onClick = { onRemoveStep(index) }, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove", modifier = Modifier.size(16.dp))
+            AnimatedVisibility(
+                visible = isAdvancedExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Custom Workflow", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        IconButton(onClick = onAddStep, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Add, contentDescription = "Add step", modifier = Modifier.size(18.dp))
+                        }
+                        Button(onClick = onExecute, modifier = Modifier.height(32.dp), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                            Text("▶️ Execute", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    if (steps.isEmpty()) {
+                        Text("Optional: manually chain tools with variables", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            steps.forEachIndexed { index, step ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = step.tool.name,
+                                        onValueChange = { },
+                                        modifier = Modifier.width(80.dp),
+                                        label = { Text("Tool", style = MaterialTheme.typography.labelSmall) },
+                                        singleLine = true,
+                                        readOnly = true
+                                    )
+                                    OutlinedTextField(
+                                        value = step.inputTemplate,
+                                        onValueChange = { onUpdateStep(index, step.copy(inputTemplate = it)) },
+                                        modifier = Modifier.weight(1f),
+                                        label = { Text("Input {{var}}", style = MaterialTheme.typography.labelSmall) },
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = step.outputVarName,
+                                        onValueChange = { onUpdateStep(index, step.copy(outputVarName = it)) },
+                                        modifier = Modifier.width(90.dp),
+                                        label = { Text("Output", style = MaterialTheme.typography.labelSmall) },
+                                        singleLine = true
+                                    )
+                                    IconButton(onClick = { onRemoveStep(index) }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remove", modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             }
                         }
                     }

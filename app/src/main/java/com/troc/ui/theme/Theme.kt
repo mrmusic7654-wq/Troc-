@@ -6,38 +6,65 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
     primary = PrimaryPurple,
-    onPrimary = DarkText,
+    onPrimary = Color.White,
     primaryContainer = DarkSurfaceVariant,
+    onPrimaryContainer = DarkText,
     secondary = SecondaryCyan,
+    onSecondary = Color.White,
+    secondaryContainer = SecondaryCyan.copy(alpha = 0.2f),
+    onSecondaryContainer = DarkText,
     tertiary = TertiaryEmerald,
+    onTertiary = Color.White,
+    tertiaryContainer = TertiaryEmerald.copy(alpha = 0.2f),
     background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant,
     onBackground = DarkText,
+    surface = DarkSurface,
     onSurface = DarkText,
+    surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkMuted,
-    error = ErrorRed
+    surfaceContainer = DarkSurface.copy(alpha = 0.8f),
+    surfaceContainerHigh = DarkSurfaceVariant,
+    error = ErrorRed,
+    onError = Color.White,
+    errorContainer = ErrorRed.copy(alpha = 0.2f),
+    outline = DarkMuted.copy(alpha = 0.3f),
+    outlineVariant = DarkMuted.copy(alpha = 0.15f),
+    scrim = Color.Black.copy(alpha = 0.5f)
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryPurple,
-    onPrimary = LightSurface,
-    primaryContainer = PrimaryPurple.copy(alpha = 0.1f),
+    onPrimary = Color.White,
+    primaryContainer = PrimaryPurple.copy(alpha = 0.12f),
+    onPrimaryContainer = PrimaryPurple,
     secondary = SecondaryCyan,
+    onSecondary = Color.White,
+    secondaryContainer = SecondaryCyan.copy(alpha = 0.15f),
+    onSecondaryContainer = SecondaryCyan,
     tertiary = TertiaryEmerald,
+    onTertiary = Color.White,
+    tertiaryContainer = TertiaryEmerald.copy(alpha = 0.15f),
     background = LightBackground,
-    surface = LightSurface,
-    surfaceVariant = LightBackground,
     onBackground = LightText,
+    surface = LightSurface,
     onSurface = LightText,
+    surfaceVariant = Color(0xFFF1F5F9),
     onSurfaceVariant = LightMuted,
-    error = ErrorRed
+    surfaceContainer = Color(0xFFF8FAFC),
+    surfaceContainerHigh = Color(0xFFE2E8F0),
+    error = ErrorRed,
+    onError = Color.White,
+    errorContainer = ErrorRed.copy(alpha = 0.15f),
+    outline = LightMuted.copy(alpha = 0.3f),
+    outlineVariant = LightMuted.copy(alpha = 0.15f),
+    scrim = Color.Black.copy(alpha = 0.3f)
 )
 
 @Composable

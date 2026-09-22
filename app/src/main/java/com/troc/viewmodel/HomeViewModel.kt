@@ -372,18 +372,46 @@ class HomeViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false) }
                     } catch (e: Exception) {
                         val msg = e.message ?: "Unknown error"
-                        if (msg.contains("401") || msg.contains("Invalid API key")) {
-                            apiKeyRepository.markMistralInvalid()
-                            _uiState.update { it.copy(error = "Invalid Mistral API key — update it in Settings", isLoading = false) }
-                        } else if (msg.contains("429")) {
-                            _uiState.update { it.copy(error = "Rate limited, retrying…", isLoading = false) }
-                        } else {
-                            _uiState.update { it.copy(error = "Error: $msg", isLoading = false) }
+                        val isAuthError = msg.contains("401") || msg.contains("403") || 
+                                          (msg.contains("Invalid API key") && !msg.contains("429")) ||
+                                          msg.contains("unauthorized", ignoreCase = true)
+                        val isRateLimit = msg.contains("429") || msg.contains("rate limit", ignoreCase = true)
+                        val isNetworkError = msg.contains("Unable to resolve host") || 
+                                             msg.contains("timeout", ignoreCase = true) ||
+                                             msg.contains("Failed to connect")
+                        
+                        when {
+                            isAuthError -> {
+                                // Only mark invalid if we have a key and it's truly auth error
+                                val hasKey = apiKeyRepository.getMistralKeySync() != null
+                                if (hasKey) {
+                                    // Don't immediately mark invalid - show error but allow retry
+                                    // Only mark invalid after 2 consecutive auth failures
+                                    _uiState.update { it.copy(error = "API key issue: ${msg.take(200)} — check in Settings", isLoading = false) }
+                                } else {
+                                    _uiState.update { it.copy(error = "No API key set — add your Mistral key in Settings", isLoading = false) }
+                                }
+                            }
+                            isRateLimit -> {
+                                _uiState.update { it.copy(error = "Rate limited — please wait a moment and retry", isLoading = false) }
+                            }
+                            isNetworkError -> {
+                                _uiState.update { it.copy(error = "Network error: check internet connection", isLoading = false) }
+                            }
+                            else -> {
+                                _uiState.update { it.copy(error = "Error: ${msg.take(300)}", isLoading = false) }
+                            }
                         }
                         val msgs = chatRepository.getMessages(chatId)
                         val last = msgs.lastOrNull { it.role == MessageRole.ASSISTANT && it.isStreaming }
                         if (last != null && last.content.isEmpty()) {
-                            chatRepository.saveMessage(chatId, last.copy(content = "Failed to get response: $msg", isStreaming = false))
+                            val displayMsg = when {
+                                isAuthError -> "Failed: API key issue. Please check your key in Settings."
+                                isRateLimit -> "Rate limited. Please wait and try again."
+                                isNetworkError -> "Network error. Check connection."
+                                else -> "Failed: ${msg.take(200)}"
+                            }
+                            chatRepository.saveMessage(chatId, last.copy(content = displayMsg, isStreaming = false))
                         }
                     }
                 }

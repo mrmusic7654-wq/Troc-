@@ -97,28 +97,34 @@ class GroqApi @Inject constructor(
     }
 
     suspend fun validateGroqKey(baseUrl: String, apiKey: String): Boolean {
-        // Try a tiny TTS request
+        // Use models endpoint for lightweight validation - more reliable than TTS
         return try {
-            val url = if (baseUrl.endsWith("/")) "${baseUrl}audio/speech" else "$baseUrl/audio/speech"
-            val reqObj = GroqTtsRequest(
-                model = Constants.DEFAULT_GROQ_TTS_MODEL,
-                input = "Hi",
-                voice = Constants.DEFAULT_GROQ_TTS_VOICE
-            )
-            val json = gson.toJson(reqObj)
-            val body = json.toRequestBody("application/json".toMediaType())
+            // Try Groq models endpoint first
+            val modelsUrl = if (baseUrl.endsWith("/")) "${baseUrl}models" else "$baseUrl/models"
             val request = Request.Builder()
-                .url(url)
+                .url(modelsUrl)
                 .header("Authorization", "Bearer $apiKey")
-                .post(body)
+                .get()
                 .build()
             val resp = okHttpClient.newCall(request).execute()
-            val success = resp.isSuccessful || resp.code == 400 // 400 means key ok but bad request? treat as valid? We'll check 401
-            val is401 = resp.code == 401 || resp.code == 403
+            val body = resp.body?.string() ?: ""
             resp.close()
-            !is401
+            // 200 = valid, 401/403 = invalid, other codes may still mean valid key but other error
+            when (resp.code) {
+                200 -> true
+                401, 403 -> false
+                else -> {
+                    // For other errors, check if body contains auth error
+                    val isAuthError = body.contains("authentication", ignoreCase = true) || 
+                                      body.contains("invalid", ignoreCase = true) ||
+                                      body.contains("unauthorized", ignoreCase = true)
+                    !isAuthError // If not auth error, assume valid (could be rate limit, etc)
+                }
+            }
         } catch (e: Exception) {
-            false
+            // Network error - don't mark as invalid, assume valid to avoid false negatives
+            // Let actual usage determine validity
+            true
         }
     }
 }

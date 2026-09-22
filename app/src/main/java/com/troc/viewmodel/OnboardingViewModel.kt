@@ -59,14 +59,31 @@ class OnboardingViewModel @Inject constructor(
 
     fun testMistral() {
         viewModelScope.launch {
+            if (_uiState.value.mistralKey.isBlank() || _uiState.value.mistralKey.length < 10) {
+                _uiState.update { it.copy(mistralValid = false) }
+                return@launch
+            }
             _uiState.update { it.copy(isTestingMistral = true, mistralValid = null) }
             val valid = mistralApi.validateKey(Constants.MISTRAL_BASE_URL, _uiState.value.mistralKey)
-            _uiState.update { it.copy(isTestingMistral = false, mistralValid = valid) }
+            // Additional check: if validation says invalid, try getModels as fallback
+            val finalValid = if (!valid) {
+                try {
+                    val models = mistralApi.getModels(Constants.MISTRAL_BASE_URL, _uiState.value.mistralKey)
+                    models.isNotEmpty()
+                } catch (e: Exception) {
+                    valid
+                }
+            } else valid
+            _uiState.update { it.copy(isTestingMistral = false, mistralValid = finalValid) }
         }
     }
 
     fun testGroq() {
         viewModelScope.launch {
+            if (_uiState.value.groqKey.isBlank() || _uiState.value.groqKey.length < 10) {
+                _uiState.update { it.copy(groqValid = false) }
+                return@launch
+            }
             _uiState.update { it.copy(isTestingGroq = true, groqValid = null) }
             val valid = groqApi.validateGroqKey(Constants.GROQ_BASE_URL, _uiState.value.groqKey)
             _uiState.update { it.copy(isTestingGroq = false, groqValid = valid) }

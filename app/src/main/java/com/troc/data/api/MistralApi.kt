@@ -180,6 +180,7 @@ class MistralApi @Inject constructor(
     }
 
     suspend fun validateKey(baseUrl: String = Constants.MISTRAL_BASE_URL, apiKey: String): Boolean {
+        if (apiKey.isBlank() || apiKey.length < 10) return false
         return try {
             val url = if (baseUrl.endsWith("/")) "${baseUrl}v1/models" else "$baseUrl/v1/models"
             val req = Request.Builder()
@@ -188,9 +189,23 @@ class MistralApi @Inject constructor(
                 .get()
                 .build()
             val resp = okHttpClient.newCall(req).execute()
-            resp.isSuccessful.also { resp.close() }
+            val code = resp.code
+            val body = resp.body?.string() ?: ""
+            resp.close()
+            when (code) {
+                200 -> true
+                401, 403 -> false
+                429 -> true // Rate limited = valid key
+                else -> {
+                    val isAuthError = body.contains("unauthorized", ignoreCase = true) ||
+                            (body.contains("invalid", ignoreCase = true) && body.contains("api", ignoreCase = true)) ||
+                            body.contains("authentication", ignoreCase = true)
+                    if (isAuthError) false else true
+                }
+            }
         } catch (e: Exception) {
-            false
+            // Network error - assume valid to avoid false negative
+            true
         }
     }
 

@@ -20,6 +20,8 @@ val LightText = Color(0xFF1E293B)
 val LightMuted = Color(0xFF64748B)
 
 val ErrorRed = Color(0xFFEF4444)
+val SuccessGreen = Color(0xFF10B981)
+val WarningAmber = Color(0xFFF59E0B)
 
 val CodeSurface = Color(0xFF0B1120)
 val CodeText = Color(0xFFE2E8F0)
