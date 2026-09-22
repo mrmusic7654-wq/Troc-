@@ -1,0 +1,225 @@
+name: Android APK Build
+
+on:
+  push:
+    branches: [ "main", "arena/**" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.6
+          cache-read-only: false
+
+      - name: Setup Android SDK
+        id: setup-android
+        uses: android-actions/setup-android@v3
+        continue-on-error: true
+
+      - name: Install Android SDK manually (fallback)
+        if: steps.setup-android.outcome == 'failure'
+        run: |
+          if [ -z "$ANDROID_HOME" ]; then
+            export ANDROID_HOME=$HOME/Android/Sdk
+            echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+            mkdir -p $ANDROID_HOME/cmdline-tools
+          fi
+          if ! command -v sdkmanager &> /dev/null; then
+            cd /tmp
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+            unzip -q cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
+            mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest || true
+            export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+            echo "PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
+          fi
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;25.1.8937393" || true
+
+      - name: Install NDK and platforms
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;25.1.8937393" || true
+          sdkmanager --list_installed || true
+
+      - name: Create local.properties for CI
+        run: |
+          if [ -z "$ANDROID_HOME" ]; then
+            echo "ANDROID_HOME not set, using $HOME/Android/Sdk"
+            export ANDROID_HOME=$HOME/Android/Sdk
+            echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          fi
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          # Only add keys if secrets exist, otherwise leave empty (ApiKeyRepository uses EncryptedPrefs)
+          if [ -n "${{ secrets.MISTRAL_API_KEY }}" ]; then
+            echo "MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}" >> local.properties
+          else
+            echo "MISTRAL_API_KEY=" >> local.properties
+          fi
+          if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> local.properties
+          else
+            echo "GROQ_API_KEY=" >> local.properties
+          fi
+          echo "=== local.properties (masked) ==="
+          cat local.properties | sed 's/\(.*API_KEY=\).*/\1***masked***/'
+          ls -lh gradle/wrapper/ || true
+          echo "=== Java version ==="
+          java -version
+          echo "=== Gradle version ==="
+          gradle --version || ./gradlew --version || true
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew || true
+
+      - name: Generate Gradle Wrapper (if jar missing)
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            gradle wrapper --gradle-version 8.6 || true
+            ls -lh gradle/wrapper/ || true
+          fi
+
+      - name: Build Debug APK
+        id: build-debug
+        run: |
+          set -o pipefail
+          echo "=== Starting Debug Build ==="
+          echo "PWD: $(pwd)"
+          echo "Files in app/: $(ls app/ | head -n 20)"
+          echo "Gradle wrapper jar exists: $(ls -lh gradle/wrapper/gradle-wrapper.jar 2>&1 || echo 'NO')"
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Using ./gradlew"
+            ./gradlew :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee build-debug.log
+          else
+            echo "Wrapper jar missing, using system gradle"
+            gradle :app:assembleDebug --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee build-debug.log
+          fi
+          echo "=== Build finished with exit code ${PIPESTATUS[0]} ==="
+          ls -lh app/build/outputs/apk/debug/ || echo "No debug apk yet"
+
+      - name: Show build log on failure
+        if: failure()
+        run: |
+          echo "=== BUILD DEBUG LOG (first 800) ==="
+          head -n 800 build-debug.log || true
+          echo ""
+          echo "=== BUILD DEBUG LOG (last 800) ==="
+          tail -n 800 build-debug.log || true
+          echo "## Build Failure Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 600 build-debug.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Post log as commit comment (bypass blob storage)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try {
+              log = fs.readFileSync('build-debug.log', 'utf8');
+            } catch (e) {
+              log = 'Failed to read log: ' + e.message;
+            }
+            // Extract error lines for quick diagnosis
+            const errorLines = log.split('\n').filter(l => 
+              l.includes('error:') || l.includes('FAILED') || l.includes('Exception') || l.includes('Unresolved') || l.includes('e: ')
+            ).slice(-50).join('\n');
+            const tail = log.slice(-15000);
+            const head = log.slice(0, 5000);
+            const body = `### ❌ Build Failure Log for run ${{ github.run_id }}\n\n**Commit:** ${{ github.sha }}\n**Branch:** ${{ github.ref }}\n\n**Key Errors (last 50 matching lines):**\n\`\`\`\n${errorLines || 'No error lines detected'}\n\`\`\`\n\n**First 5000 chars:**\n\`\`\`\n${head}\n\`\`\`\n\n**Last 15000 chars:**\n\`\`\`\n${tail}\n\`\`\`\n\n[View full run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+            // Post as commit comment
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: body
+              });
+              console.log('Posted commit comment');
+            } catch (e) {
+              console.log('Failed to post commit comment: ' + e.message);
+              // Try issue comment if PR
+              if (context.payload.pull_request) {
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.payload.pull_request.number,
+                    body: body
+                  });
+                  console.log('Posted PR comment');
+                } catch (e2) {
+                  console.log('Failed issue comment: ' + e2.message);
+                }
+              }
+            }
+
+      - name: Build Release APK (unsigned)
+        if: always()
+        run: |
+          set -o pipefail
+          if [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            ./gradlew :app:assembleRelease --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee build-release.log || echo "Release failed"
+          else
+            gradle :app:assembleRelease --stacktrace --no-daemon -Dorg.gradle.jvmargs="-Xmx4g" 2>&1 | tee build-release.log || echo "Release failed"
+          fi
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build-debug.log
+            build-release.log
+          retention-days: 7
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: troc-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: troc-release-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Get APK info
+        if: always()
+        run: |
+          ls -lh app/build/outputs/apk/debug/ || true
+          ls -lh app/build/outputs/apk/release/ || true
+          echo "### APK Build Summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            echo "- Debug APK: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- T chat bubble + spark -->
+    <group android:scaleX="1.8" android:scaleY="1.8" android:translateX="18" android:translateY="18">
+        <!-- chat bubble shape forming T -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 L14,22 L18,26 L16,22 L24,22 C29.52,22 34,17.52 34,12 C34,6.48 29.52,2 24,2 Z"
+            android:strokeWidth="0"/>
+        <!-- T letter cutout - using background color trick via path -->
+        <path
+            android:fillColor="#0F172A"
+            android:pathData="M11,8 L25,8 L25,11 L20,11 L20,20 L16,20 L16,11 L11,11 Z"/>
+        <!-- Spark orb top-right -->
+        <path
+            android:fillColor="#06B6D4"
+            android:pathData="M27,4 C27,2.34 28.34,1 30,1 C31.66,1 33,2.34 33,4 C33,5.66 31.66,7 30,7 C28.34,7 27,5.66 27,4 Z"/>
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M28.5,4 C28.5,3.17 29.17,2.5 30,2.5 C30.83,2.5 31.5,3.17 31.5,4 C31.5,4.83 30.83,5.5 30,5.5 C29.17,5.5 28.5,4.83 28.5,4 Z"
+            android:fillAlpha="0.9"/>
+    </group>
+</vector>
