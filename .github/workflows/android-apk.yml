@@ -72,16 +72,19 @@ jobs:
             echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           fi
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          # Only add keys if secrets exist, otherwise leave empty (ApiKeyRepository uses EncryptedPrefs)
+          # Only add keys if secrets exist - if empty, don't write them to avoid BuildConfig generation error
+          # ApiKeyRepository uses EncryptedPrefs and reflection fallback, so empty is handled
           if [ -n "${{ secrets.MISTRAL_API_KEY }}" ]; then
             echo "MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}" >> local.properties
+            echo "Added MISTRAL_API_KEY from secret"
           else
-            echo "MISTRAL_API_KEY=" >> local.properties
+            echo "MISTRAL_API_KEY not set in secrets - skipping (will use fallback empty BuildConfig)"
           fi
           if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
             echo "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" >> local.properties
+            echo "Added GROQ_API_KEY from secret"
           else
-            echo "GROQ_API_KEY=" >> local.properties
+            echo "GROQ_API_KEY not set in secrets - skipping"
           fi
           echo "=== local.properties (masked) ==="
           cat local.properties | sed 's/\(.*API_KEY=\).*/\1***masked***/'
