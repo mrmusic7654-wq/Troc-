@@ -157,3 +157,18 @@ com.troc/
 
 ## License
 Private — All rights reserved.
+
+## ✅ Build Status (2026-09-22)
+- **Latest successful run:** 35787264508 on branch arena/01a0c956-troc
+- Debug APK: 22.8 MB, Release APK: 15.8 MB
+- Artifacts available in GitHub Actions → `troc-debug-apk`, `troc-release-apk`, `build-logs`
+- Fixes applied:
+  - Removed hard Chaquopy dependency (now optional via reflection, mock fallback)
+  - Fixed LinearProgressIndicator progress Float vs lambda (Material3 1.1.2)
+  - Removed compose-richtext alpha dependency (custom SimpleMarkdownText)
+  - Fixed WorkManager Configuration.Provider to use val property (2.9.0)
+  - Fixed duplicate containerColor in VoiceModeScreen Scaffold
+  - Fixed Hilt plugin id consistency (com.google.dagger.hilt.android)
+  - Fixed BuildConfig generation for empty API keys (skip empty keys in local.properties)
+  - Robust workflow with fallback SDK install, NDK 25.1.8937393, wrapper generation, commit comment logging
+
