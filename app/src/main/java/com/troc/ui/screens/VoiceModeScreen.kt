@@ -154,8 +154,7 @@ fun VoiceModeScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-            },
-            containerColor = Color.Transparent
+            }
         ) { padding ->
             Column(
                 modifier = Modifier
