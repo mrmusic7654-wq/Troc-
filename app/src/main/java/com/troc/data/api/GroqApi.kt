@@ -97,33 +97,34 @@ class GroqApi @Inject constructor(
     }
 
     suspend fun validateGroqKey(baseUrl: String, apiKey: String): Boolean {
-        // Use models endpoint for lightweight validation - more reliable than TTS
+        if (apiKey.isBlank() || apiKey.length < 10) return false
         return try {
-            // Try Groq models endpoint first
             val modelsUrl = if (baseUrl.endsWith("/")) "${baseUrl}models" else "$baseUrl/models"
             val request = Request.Builder()
                 .url(modelsUrl)
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
-            val resp = okHttpClient.newCall(request).execute()
+            val validationClient = OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            val resp = validationClient.newCall(request).execute()
             val body = resp.body?.string() ?: ""
+            val code = resp.code
             resp.close()
-            // 200 = valid, 401/403 = invalid, other codes may still mean valid key but other error
-            when (resp.code) {
+            when (code) {
                 200 -> true
                 401, 403 -> false
+                429 -> true
                 else -> {
-                    // For other errors, check if body contains auth error
                     val isAuthError = body.contains("authentication", ignoreCase = true) || 
                                       body.contains("invalid", ignoreCase = true) ||
                                       body.contains("unauthorized", ignoreCase = true)
-                    !isAuthError // If not auth error, assume valid (could be rate limit, etc)
+                    !isAuthError
                 }
             }
         } catch (e: Exception) {
-            // Network error - don't mark as invalid, assume valid to avoid false negatives
-            // Let actual usage determine validity
             true
         }
     }

@@ -70,10 +70,9 @@ object NetworkModule {
             .build()
     }
 
-    @Provides
-    @Singleton
-    fun provideOkHttpClientNoAuth(): OkHttpClient {
-        // For validation where we pass key explicitly
+    // No Hilt binding for no-auth client to avoid DuplicateBindings
+    // Validation creates its own client internally
+    fun createNoAuthClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

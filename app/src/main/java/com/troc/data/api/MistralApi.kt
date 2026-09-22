@@ -188,7 +188,12 @@ class MistralApi @Inject constructor(
                 .header("Authorization", "Bearer $apiKey")
                 .get()
                 .build()
-            val resp = okHttpClient.newCall(req).execute()
+            // Use fresh client without auth interceptor for validation to avoid interference
+            val validationClient = OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            val resp = validationClient.newCall(req).execute()
             val code = resp.code
             val body = resp.body?.string() ?: ""
             resp.close()
