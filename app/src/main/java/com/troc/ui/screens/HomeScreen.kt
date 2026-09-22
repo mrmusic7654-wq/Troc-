@@ -650,10 +650,10 @@ fun SegmentedToggle(isAgentMode: Boolean, onToggle: () -> Unit) {
 fun SuggestionCard(
     title: String,
     subtitle: String,
-    onClick: () -> Unit,
     icon: String = "✨",
     isAgent: Boolean = false,
-    isHighlighted: Boolean = false
+    isHighlighted: Boolean = false,
+    onClick: () -> Unit
 ) {
     Card(
         onClick = onClick,
