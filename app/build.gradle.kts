@@ -1,11 +1,11 @@
 plugins {
-    id("com.android.application") version "8.2.2"
-    id("org.jetbrains.kotlin.android") version "1.9.22"
-    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
-    id("dagger.hilt.android.plugin") version "2.50"
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin") version "2.0.1"
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
+    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
     // Chaquopy is optional - uncomment to enable Python sandbox with real runtime
-    // id("com.chaquo.python") version "15.0.1"
+    // id("com.chaquo.python")
 }
 
 android {
