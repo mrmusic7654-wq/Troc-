@@ -12,65 +12,69 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryPurple,
+    primary = PrimaryIndigo,
     onPrimary = Color.White,
-    primaryContainer = DarkSurfaceVariant,
-    onPrimaryContainer = DarkText,
+    primaryContainer = Color(0xFF1E1B4B),
+    onPrimaryContainer = Color(0xFFE0E7FF),
     secondary = SecondaryCyan,
-    onSecondary = Color.White,
-    secondaryContainer = SecondaryCyan.copy(alpha = 0.2f),
-    onSecondaryContainer = DarkText,
+    onSecondary = Color.Black,
+    secondaryContainer = Color(0xFF083344),
+    onSecondaryContainer = Color(0xFFCFFAFE),
     tertiary = TertiaryEmerald,
     onTertiary = Color.White,
-    tertiaryContainer = TertiaryEmerald.copy(alpha = 0.2f),
+    tertiaryContainer = SuccessContainerDark,
+    onTertiaryContainer = Color(0xFFD1FAE5),
     background = DarkBackground,
     onBackground = DarkText,
     surface = DarkSurface,
     onSurface = DarkText,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkMuted,
-    surfaceContainer = DarkSurface.copy(alpha = 0.8f),
-    surfaceContainerHigh = DarkSurfaceVariant,
+    surfaceContainer = DarkSurface,
+    surfaceContainerHigh = DarkSurfaceHigh,
     error = ErrorRed,
     onError = Color.White,
-    errorContainer = ErrorRed.copy(alpha = 0.2f),
-    outline = DarkMuted.copy(alpha = 0.3f),
-    outlineVariant = DarkMuted.copy(alpha = 0.15f),
-    scrim = Color.Black.copy(alpha = 0.5f)
+    errorContainer = ErrorContainerDark,
+    onErrorContainer = Color(0xFFFECACA),
+    outline = DarkBorder,
+    outlineVariant = Color(0xFF1E293B),
+    scrim = Color.Black.copy(alpha = 0.6f)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryPurple,
+    primary = PrimaryIndigo,
     onPrimary = Color.White,
-    primaryContainer = PrimaryPurple.copy(alpha = 0.12f),
-    onPrimaryContainer = PrimaryPurple,
+    primaryContainer = Color(0xFFEEF2FF),
+    onPrimaryContainer = PrimaryIndigo,
     secondary = SecondaryCyan,
     onSecondary = Color.White,
-    secondaryContainer = SecondaryCyan.copy(alpha = 0.15f),
-    onSecondaryContainer = SecondaryCyan,
+    secondaryContainer = Color(0xFFECFEFF),
+    onSecondaryContainer = Color(0xFF0E7490),
     tertiary = TertiaryEmerald,
     onTertiary = Color.White,
-    tertiaryContainer = TertiaryEmerald.copy(alpha = 0.15f),
+    tertiaryContainer = Color(0xFFECFDF5),
+    onTertiaryContainer = Color(0xFF047857),
     background = LightBackground,
     onBackground = LightText,
     surface = LightSurface,
     onSurface = LightText,
-    surfaceVariant = Color(0xFFF1F5F9),
+    surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightMuted,
-    surfaceContainer = Color(0xFFF8FAFC),
-    surfaceContainerHigh = Color(0xFFE2E8F0),
+    surfaceContainer = LightSurface,
+    surfaceContainerHigh = LightSurfaceHigh,
     error = ErrorRed,
     onError = Color.White,
-    errorContainer = ErrorRed.copy(alpha = 0.15f),
-    outline = LightMuted.copy(alpha = 0.3f),
-    outlineVariant = LightMuted.copy(alpha = 0.15f),
+    errorContainer = Color(0xFFFEE2E2),
+    onErrorContainer = Color(0xFFB91C1C),
+    outline = LightBorder,
+    outlineVariant = Color(0xFFCBD5E1),
     scrim = Color.Black.copy(alpha = 0.3f)
 )
 
 @Composable
 fun TrocTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    themeSetting: String = "system", // system, light, dark
+    themeSetting: String = "system",
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -94,6 +98,7 @@ fun TrocTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !useDark
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !useDark
         }
     }
 

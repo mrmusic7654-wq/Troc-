@@ -8,10 +8,13 @@ import com.troc.data.prefs.SettingsDataStore
 import com.troc.data.repository.ApiKeyRepository
 import com.troc.data.repository.ChatRepository
 import com.troc.data.repository.SandboxRepository
+import com.troc.data.repository.UsageRepository
 import com.troc.domain.model.*
 import com.troc.domain.usecase.ExecuteSandbox
 import com.troc.domain.usecase.RunAgentLoop
 import com.troc.domain.usecase.SendMessage
+import com.troc.domain.usecase.WebSearch
+import com.troc.util.Constants
 import com.troc.util.FileUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -47,12 +50,10 @@ data class HomeUiState(
         "ministral-8b-latest"
     ),
     val isModelDropdownExpanded: Boolean = false,
-    // Usage tracking
-    val apiUsage: ApiUsage? = null,
-    val isUsageLoading: Boolean = false,
     // Web search
     val webSearchResults: String? = null,
-    val isWebSearching: Boolean = false
+    val isWebSearching: Boolean = false,
+    val hasApiKey: Boolean = true
 )
 
 @HiltViewModel
@@ -64,8 +65,8 @@ class HomeViewModel @Inject constructor(
     private val executeSandbox: ExecuteSandbox,
     private val sandboxRepository: SandboxRepository,
     private val settingsDataStore: SettingsDataStore,
-    private val usageRepository: com.troc.data.repository.UsageRepository,
-    private val webSearch: com.troc.domain.usecase.WebSearch,
+    private val usageRepository: UsageRepository,
+    private val webSearch: WebSearch,
     private val mistralApi: com.troc.data.api.MistralApi,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -79,20 +80,21 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settingsDataStore.mistralModelFlow.collect { model ->
-                _uiState.update { it.copy(selectedModel = model) }
+                _uiState.update { it.copy(selectedModel = model.ifBlank { "mistral-small-latest" }) }
             }
         }
         viewModelScope.launch {
-            usageRepository.observeUsage().collect { usage ->
-                _uiState.update { it.copy(apiUsage = usage) }
+            apiKeyRepository.mistralKeyState.collect { state ->
+                val hasKey = state is ApiKeyState.UserProvided || state is ApiKeyState.Default
+                _uiState.update { it.copy(hasApiKey = hasKey) }
             }
         }
-        // Load available models from API
+        // Load available models from API if key is present
         viewModelScope.launch {
             try {
                 val key = apiKeyRepository.getMistralKeySync()
-                if (key != null) {
-                    val models = mistralApi.getModels(com.troc.util.Constants.MISTRAL_BASE_URL, key)
+                if (!key.isNullOrBlank()) {
+                    val models = mistralApi.getModels(Constants.MISTRAL_BASE_URL, key)
                     if (models.isNotEmpty()) {
                         _uiState.update { it.copy(availableModels = models) }
                     }
@@ -164,87 +166,24 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(attachedFileContent = null, attachedFileName = null) }
     }
 
-    fun addWorkflowStep() {
-        val step = WorkflowStep(
-            tool = ToolType.CODE,
-            language = "python",
-            inputTemplate = "",
-            outputVarName = "output_${UUID.randomUUID().toString().take(4)}"
-        )
-        _uiState.update { it.copy(workflowSteps = it.workflowSteps + step) }
-    }
-
-    fun updateWorkflowStep(index: Int, step: WorkflowStep) {
-        val list = _uiState.value.workflowSteps.toMutableList()
-        if (index in list.indices) {
-            list[index] = step
-            _uiState.update { it.copy(workflowSteps = list) }
-        }
-    }
-
-    fun removeWorkflowStep(index: Int) {
-        val list = _uiState.value.workflowSteps.toMutableList()
-        if (index in list.indices) {
-            list.removeAt(index)
-            _uiState.update { it.copy(workflowSteps = list) }
-        }
-    }
-
-    fun executeWorkflow() {
-        val steps = _uiState.value.workflowSteps
-        if (steps.isEmpty()) return
-        val workflow = Workflow(name = "Chat Workflow", steps = steps)
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val variables = mutableMapOf<String, String>()
-            for (step in steps) {
-                var input = step.inputTemplate
-                variables.forEach { (k, v) -> input = input.replace("{{${k}}}", v) }
-                val toolCall = ToolCall(tool = step.tool, language = step.language, input = input, isRunning = true)
-                _uiState.update { it.copy(activeToolCalls = it.activeToolCalls + toolCall) }
-
-                val result = when (step.tool) {
-                    ToolType.CODE -> executeSandbox.executeCode(step.language, input)
-                    ToolType.DATA -> {
-                        val stats = executeSandbox.executeData(input)
-                        SandboxResult.Success("Data stats: $stats", 0)
-                    }
-                    ToolType.FILE -> executeSandbox.executeFile("metadata", input)
-                    else -> SandboxResult.Error("Unknown tool")
-                }
-
-                val output = when (result) {
-                    is SandboxResult.Success -> result.output
-                    is SandboxResult.Error -> "Error: ${result.message}"
-                    is SandboxResult.Timeout -> "Timeout"
-                }
-                variables[step.outputVarName] = output
-
-                val completed = toolCall.copy(output = output, isRunning = false, executionTimeMs = (result as? SandboxResult.Success)?.executionTimeMs ?: 0)
-                _uiState.update { state ->
-                    state.copy(activeToolCalls = state.activeToolCalls.map { if (it.id == toolCall.id) completed else it })
-                }
-
-                // Add to chat as tool message
-                val chatId = currentChatId ?: continue
-                val toolMessage = ChatMessage(role = MessageRole.TOOL, content = "Workflow step ${step.outputVarName}: $output", chatId = chatId)
-                chatRepository.saveMessage(chatId, toolMessage)
-            }
-            _uiState.update { it.copy(isLoading = false) }
-        }
-    }
-
     fun sendMessage() {
         val text = _uiState.value.inputText.trim()
         if (text.isEmpty() && _uiState.value.attachedFileContent == null) return
         if (_uiState.value.isLoading) return
 
         val chatId = currentChatId ?: return
-        val fullText = if (_uiState.value.attachedFileContent != null) {
-            "$text\n\n[Attached ${_uiState.value.attachedFileName}]:\n${_uiState.value.attachedFileContent?.take(5000)}"
-        } else text
 
         viewModelScope.launch {
+            val key = apiKeyRepository.getMistralKeySync()
+            if (key.isNullOrBlank()) {
+                _uiState.update { it.copy(error = "No Mistral API key found. Please add your key in Settings.") }
+                return@launch
+            }
+
+            val fullText = if (_uiState.value.attachedFileContent != null) {
+                "$text\n\n[Attached ${_uiState.value.attachedFileName}]:\n${_uiState.value.attachedFileContent?.take(5000)}"
+            } else text
+
             val userMessage = ChatMessage(role = MessageRole.USER, content = fullText, chatId = chatId)
             chatRepository.saveMessage(chatId, userMessage)
             _uiState.update { it.copy(inputText = "", attachedFileContent = null, attachedFileName = null, isLoading = true, error = null, webSearchResults = null) }
@@ -261,7 +200,6 @@ class HomeViewModel @Inject constructor(
                     if (searchResult.isSuccess) {
                         webSearchContext = searchResult.getOrNull()
                         _uiState.update { it.copy(webSearchResults = webSearchContext, isWebSearching = false) }
-                        // Add tool card for web search
                         val toolCall = ToolCall(
                             tool = ToolType.CUSTOM,
                             input = "Web search: $fullText",
@@ -278,7 +216,7 @@ class HomeViewModel @Inject constructor(
             }
 
             if (_uiState.value.isAgentMode) {
-                // Agent loop with web search support
+                // Autonomous Agent Loop
                 val agentMessages = history
                 runAgentLoop.run(agentMessages) { toolCall ->
                     _uiState.update { state -> state.copy(activeToolCalls = state.activeToolCalls + toolCall) }
@@ -290,7 +228,6 @@ class HomeViewModel @Inject constructor(
                         }
                         ToolType.FILE -> executeSandbox.executeFile("metadata", toolCall.input)
                         ToolType.CUSTOM -> {
-                            // Handle web_search tool
                             if (toolCall.input.contains("web_search", ignoreCase = true) || toolCall.tool == ToolType.CUSTOM) {
                                 try {
                                     val query = if (toolCall.input.contains("\"input\"")) {
@@ -354,7 +291,7 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false) }
 
             } else {
-                // Normal chat streaming with optional web search context
+                // Normal chat streaming
                 streamingJob = viewModelScope.launch {
                     try {
                         var assistantMessage = ChatMessage(role = MessageRole.ASSISTANT, content = "", isStreaming = true, chatId = chatId)
@@ -372,46 +309,27 @@ class HomeViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false) }
                     } catch (e: Exception) {
                         val msg = e.message ?: "Unknown error"
-                        val isAuthError = msg.contains("401") || msg.contains("403") || 
-                                          (msg.contains("Invalid API key") && !msg.contains("429")) ||
-                                          msg.contains("unauthorized", ignoreCase = true)
+                        val isAuthError = msg.contains("401") || msg.contains("403") ||
+                                msg.contains("unauthorized", ignoreCase = true) ||
+                                (msg.contains("API key", ignoreCase = true) && !msg.contains("429"))
                         val isRateLimit = msg.contains("429") || msg.contains("rate limit", ignoreCase = true)
-                        val isNetworkError = msg.contains("Unable to resolve host") || 
-                                             msg.contains("timeout", ignoreCase = true) ||
-                                             msg.contains("Failed to connect")
-                        
-                        when {
-                            isAuthError -> {
-                                // Only mark invalid if we have a key and it's truly auth error
-                                val hasKey = apiKeyRepository.getMistralKeySync() != null
-                                if (hasKey) {
-                                    // Don't immediately mark invalid - show error but allow retry
-                                    // Only mark invalid after 2 consecutive auth failures
-                                    _uiState.update { it.copy(error = "API key issue: ${msg.take(200)} — check in Settings", isLoading = false) }
-                                } else {
-                                    _uiState.update { it.copy(error = "No API key set — add your Mistral key in Settings", isLoading = false) }
-                                }
-                            }
-                            isRateLimit -> {
-                                _uiState.update { it.copy(error = "Rate limited — please wait a moment and retry", isLoading = false) }
-                            }
-                            isNetworkError -> {
-                                _uiState.update { it.copy(error = "Network error: check internet connection", isLoading = false) }
-                            }
-                            else -> {
-                                _uiState.update { it.copy(error = "Error: ${msg.take(300)}", isLoading = false) }
-                            }
+                        val isNetworkError = msg.contains("Unable to resolve host", ignoreCase = true) ||
+                                msg.contains("timeout", ignoreCase = true) ||
+                                msg.contains("Failed to connect", ignoreCase = true)
+
+                        val friendlyError = when {
+                            isAuthError -> "API key issue: Please check your Mistral API key in Settings."
+                            isRateLimit -> "Rate limit reached. Please wait a moment and try again."
+                            isNetworkError -> "Network connection failed. Please check your internet."
+                            else -> "Error: ${msg.take(200)}"
                         }
+
+                        _uiState.update { it.copy(error = friendlyError, isLoading = false) }
+
                         val msgs = chatRepository.getMessages(chatId)
                         val last = msgs.lastOrNull { it.role == MessageRole.ASSISTANT && it.isStreaming }
                         if (last != null && last.content.isEmpty()) {
-                            val displayMsg = when {
-                                isAuthError -> "Failed: API key issue. Please check your key in Settings."
-                                isRateLimit -> "Rate limited. Please wait and try again."
-                                isNetworkError -> "Network error. Check connection."
-                                else -> "Failed: ${msg.take(200)}"
-                            }
-                            chatRepository.saveMessage(chatId, last.copy(content = displayMsg, isStreaming = false))
+                            chatRepository.saveMessage(chatId, last.copy(content = friendlyError, isStreaming = false))
                         }
                     }
                 }
@@ -437,14 +355,13 @@ class HomeViewModel @Inject constructor(
     }
 
     fun insertTranscribedText(text: String) {
-        _uiState.update { it.copy(inputText = it.inputText + text) }
+        _uiState.update { it.copy(inputText = if (it.inputText.isBlank()) text else "${it.inputText} $text") }
     }
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
 
-    // Model selector methods
     fun toggleModelDropdown() {
         _uiState.update { it.copy(isModelDropdownExpanded = !it.isModelDropdownExpanded) }
     }
@@ -464,8 +381,8 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val key = apiKeyRepository.getMistralKeySync()
-                if (key != null) {
-                    val models = mistralApi.getModels(com.troc.util.Constants.MISTRAL_BASE_URL, key)
+                if (!key.isNullOrBlank()) {
+                    val models = mistralApi.getModels(Constants.MISTRAL_BASE_URL, key)
                     if (models.isNotEmpty()) {
                         _uiState.update { it.copy(availableModels = models) }
                     }
@@ -476,31 +393,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // Web search mode
     fun toggleWebSearchMode() {
         _uiState.update { it.copy(isWebSearchMode = !it.isWebSearchMode) }
     }
 
     fun setWebSearchMode(enabled: Boolean) {
         _uiState.update { it.copy(isWebSearchMode = enabled) }
-    }
-
-    // Usage
-    fun clearUsage() {
-        viewModelScope.launch {
-            usageRepository.clearAll()
-        }
-    }
-
-    fun refreshUsage() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isUsageLoading = true) }
-            try {
-                val usage = usageRepository.getUsage()
-                _uiState.update { it.copy(apiUsage = usage, isUsageLoading = false) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isUsageLoading = false, error = "Failed to load usage: ${e.message}") }
-            }
-        }
     }
 }

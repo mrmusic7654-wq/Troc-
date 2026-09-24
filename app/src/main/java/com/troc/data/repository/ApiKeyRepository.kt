@@ -23,12 +23,23 @@ class ApiKeyRepository @Inject constructor(
         refreshKeys()
     }
 
+    private fun cleanKey(key: String?): String? {
+        if (key.isNullOrBlank()) return null
+        val cleaned = key.trim()
+            .removePrefix("Bearer ")
+            .removePrefix("bearer ")
+            .trim()
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+        return cleaned.ifBlank { null }
+    }
+
     private fun getBuildConfigField(name: String): String? {
         return try {
             val clazz = Class.forName("com.troc.BuildConfig")
             val field = clazz.getField(name)
             val value = field.get(null) as? String
-            value?.takeIf { it.isNotBlank() }
+            cleanKey(value)
         } catch (e: Exception) {
             null
         }
@@ -36,7 +47,7 @@ class ApiKeyRepository @Inject constructor(
 
     fun refreshKeys() {
         // Mistral
-        val userMistral = encryptedPrefs.getString(EncryptedPrefs.KEY_MISTRAL_USER)
+        val userMistral = cleanKey(encryptedPrefs.getString(EncryptedPrefs.KEY_MISTRAL_USER))
         val defaultMistral = getBuildConfigField("MISTRAL_API_KEY")
             ?: getBuildConfigField("MISTRAL_API_KEY_FALLBACK")
 
@@ -47,7 +58,7 @@ class ApiKeyRepository @Inject constructor(
         }
 
         // Groq
-        val userGroq = encryptedPrefs.getString(EncryptedPrefs.KEY_GROQ_USER)
+        val userGroq = cleanKey(encryptedPrefs.getString(EncryptedPrefs.KEY_GROQ_USER))
         val defaultGroq = getBuildConfigField("GROQ_API_KEY")
             ?: getBuildConfigField("GROQ_API_KEY_FALLBACK")
 
@@ -59,19 +70,21 @@ class ApiKeyRepository @Inject constructor(
     }
 
     fun saveMistralKey(key: String) {
-        if (key.isBlank()) {
+        val cleaned = cleanKey(key)
+        if (cleaned == null) {
             encryptedPrefs.remove(EncryptedPrefs.KEY_MISTRAL_USER)
         } else {
-            encryptedPrefs.putString(EncryptedPrefs.KEY_MISTRAL_USER, key.trim())
+            encryptedPrefs.putString(EncryptedPrefs.KEY_MISTRAL_USER, cleaned)
         }
         refreshKeys()
     }
 
     fun saveGroqKey(key: String) {
-        if (key.isBlank()) {
+        val cleaned = cleanKey(key)
+        if (cleaned == null) {
             encryptedPrefs.remove(EncryptedPrefs.KEY_GROQ_USER)
         } else {
-            encryptedPrefs.putString(EncryptedPrefs.KEY_GROQ_USER, key.trim())
+            encryptedPrefs.putString(EncryptedPrefs.KEY_GROQ_USER, cleaned)
         }
         refreshKeys()
     }
@@ -85,28 +98,34 @@ class ApiKeyRepository @Inject constructor(
     }
 
     suspend fun getMistralKeySync(): String? {
-        return when (val s = _mistralKeyState.value) {
+        val key = when (val s = _mistralKeyState.value) {
             is ApiKeyState.UserProvided -> s.key
             is ApiKeyState.Default -> s.key
             else -> {
-                // re-read fallback
                 val user = encryptedPrefs.getString(EncryptedPrefs.KEY_MISTRAL_USER)
-                if (!user.isNullOrBlank()) return user
-                getBuildConfigField("MISTRAL_API_KEY") ?: getBuildConfigField("MISTRAL_API_KEY_FALLBACK")
+                if (!user.isNullOrBlank()) user
+                else getBuildConfigField("MISTRAL_API_KEY") ?: getBuildConfigField("MISTRAL_API_KEY_FALLBACK")
             }
         }
+        return cleanKey(key)
     }
 
     suspend fun getGroqKeySync(): String? {
-        return when (val s = _groqKeyState.value) {
+        val key = when (val s = _groqKeyState.value) {
             is ApiKeyState.UserProvided -> s.key
             is ApiKeyState.Default -> s.key
             else -> {
                 val user = encryptedPrefs.getString(EncryptedPrefs.KEY_GROQ_USER)
-                if (!user.isNullOrBlank()) return user
-                getBuildConfigField("GROQ_API_KEY") ?: getBuildConfigField("GROQ_API_KEY_FALLBACK")
+                if (!user.isNullOrBlank()) user
+                else getBuildConfigField("GROQ_API_KEY") ?: getBuildConfigField("GROQ_API_KEY_FALLBACK")
             }
         }
+        return cleanKey(key)
+    }
+
+    fun hasMistralKey(): Boolean {
+        val state = _mistralKeyState.value
+        return state is ApiKeyState.UserProvided || state is ApiKeyState.Default
     }
 
     fun clearAllKeys() {

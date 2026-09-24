@@ -10,10 +10,21 @@ class MistralAuthInterceptor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val key = runBlocking { apiKeyRepository.getMistralKeySync() }
-        val newRequest = if (key != null) {
+        val key = try {
+            runBlocking { apiKeyRepository.getMistralKeySync() }
+        } catch (e: Exception) {
+            null
+        }
+        val cleanKey = key?.trim()
+            ?.removePrefix("Bearer ")
+            ?.removePrefix("bearer ")
+            ?.trim()
+            ?.removeSurrounding("\"")
+            ?.removeSurrounding("'")
+
+        val newRequest = if (!cleanKey.isNullOrBlank()) {
             original.newBuilder()
-                .header("Authorization", "Bearer $key")
+                .header("Authorization", "Bearer $cleanKey")
                 .header("Content-Type", "application/json")
                 .build()
         } else {
@@ -28,10 +39,21 @@ class GroqAuthInterceptor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val key = runBlocking { apiKeyRepository.getGroqKeySync() }
-        val newRequest = if (key != null) {
+        val key = try {
+            runBlocking { apiKeyRepository.getGroqKeySync() }
+        } catch (e: Exception) {
+            null
+        }
+        val cleanKey = key?.trim()
+            ?.removePrefix("Bearer ")
+            ?.removePrefix("bearer ")
+            ?.trim()
+            ?.removeSurrounding("\"")
+            ?.removeSurrounding("'")
+
+        val newRequest = if (!cleanKey.isNullOrBlank()) {
             original.newBuilder()
-                .header("Authorization", "Bearer $key")
+                .header("Authorization", "Bearer $cleanKey")
                 .build()
         } else {
             original

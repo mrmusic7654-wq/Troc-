@@ -9,7 +9,10 @@ import com.troc.data.prefs.SettingsDataStore
 import com.troc.data.repository.ApiKeyRepository
 import com.troc.data.repository.ChatRepository
 import com.troc.data.repository.SandboxRepository
+import com.troc.data.repository.UsageRepository
 import com.troc.domain.model.ApiKeyState
+import com.troc.domain.model.ApiUsage
+import com.troc.domain.model.UsageHistoryItem
 import com.troc.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -40,8 +43,9 @@ data class SettingsUiState(
     val theme: String = "system",
     val fontSize: String = "M",
     val accent: String = "purple",
-    val apiUsage: com.troc.domain.model.ApiUsage? = null,
-    val usageHistory: List<com.troc.domain.model.UsageHistoryItem> = emptyList()
+    val apiUsage: ApiUsage? = null,
+    val usageHistory: List<UsageHistoryItem> = emptyList(),
+    val saveSuccessMessage: String? = null
 )
 
 @HiltViewModel
@@ -53,7 +57,7 @@ class SettingsViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val sandboxRepository: SandboxRepository,
     private val encryptedPrefs: EncryptedPrefs,
-    private val usageRepository: com.troc.data.repository.UsageRepository
+    private val usageRepository: UsageRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -141,18 +145,19 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateMistralInput(text: String) {
-        _uiState.update { it.copy(mistralInput = text) }
+        _uiState.update { it.copy(mistralInput = text, mistralValid = null) }
     }
 
     fun updateGroqInput(text: String) {
-        _uiState.update { it.copy(groqInput = text) }
+        _uiState.update { it.copy(groqInput = text, groqValid = null) }
     }
 
     fun saveMistralKey() {
         val key = _uiState.value.mistralInput.trim()
         if (key.isNotEmpty()) {
             apiKeyRepository.saveMistralKey(key)
-            _uiState.update { it.copy(mistralInput = "") }
+            _uiState.update { it.copy(mistralInput = "", saveSuccessMessage = "Mistral key saved successfully!") }
+            testMistralKey()
         }
     }
 
@@ -160,14 +165,21 @@ class SettingsViewModel @Inject constructor(
         val key = _uiState.value.groqInput.trim()
         if (key.isNotEmpty()) {
             apiKeyRepository.saveGroqKey(key)
-            _uiState.update { it.copy(groqInput = "") }
+            _uiState.update { it.copy(groqInput = "", saveSuccessMessage = "Groq key saved successfully!") }
+            testGroqKey()
         }
+    }
+
+    fun clearSaveSuccessMessage() {
+        _uiState.update { it.copy(saveSuccessMessage = null) }
     }
 
     fun testMistralKey() {
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingMistral = true, mistralValid = null) }
-            val key = _uiState.value.mistralInput.ifEmpty {
+            val key = if (_uiState.value.mistralInput.isNotBlank()) {
+                _uiState.value.mistralInput.trim()
+            } else {
                 apiKeyRepository.getMistralKeySync() ?: ""
             }
             if (key.isBlank()) {
@@ -177,21 +189,8 @@ class SettingsViewModel @Inject constructor(
             val endpoint = _uiState.value.customEndpoint.ifEmpty { Constants.MISTRAL_BASE_URL }
             val valid = mistralApi.validateKey(endpoint, key)
             _uiState.update { it.copy(isTestingMistral = false, mistralValid = valid) }
-            // Only mark invalid if key is definitely invalid (not on network error)
-            // Our validateKey now returns true on network errors to avoid false negatives
-            if (!valid) {
-                // Double-check: try to get models as additional validation
-                try {
-                    val models = mistralApi.getModels(endpoint, key)
-                    if (models.isNotEmpty()) {
-                        // If we can get models, key is valid despite validateKey saying false
-                        _uiState.update { it.copy(mistralValid = true) }
-                        return@launch
-                    }
-                } catch (e: Exception) {
-                    // Ignore
-                }
-                apiKeyRepository.markMistralInvalid()
+            if (valid && _uiState.value.mistralInput.isNotBlank()) {
+                apiKeyRepository.saveMistralKey(key)
             }
         }
     }
@@ -199,7 +198,9 @@ class SettingsViewModel @Inject constructor(
     fun testGroqKey() {
         viewModelScope.launch {
             _uiState.update { it.copy(isTestingGroq = true, groqValid = null) }
-            val key = _uiState.value.groqInput.ifEmpty {
+            val key = if (_uiState.value.groqInput.isNotBlank()) {
+                _uiState.value.groqInput.trim()
+            } else {
                 apiKeyRepository.getGroqKeySync() ?: ""
             }
             if (key.isBlank()) {
@@ -209,8 +210,8 @@ class SettingsViewModel @Inject constructor(
             val endpoint = Constants.GROQ_BASE_URL
             val valid = groqApi.validateGroqKey(endpoint, key)
             _uiState.update { it.copy(isTestingGroq = false, groqValid = valid) }
-            if (!valid) {
-                apiKeyRepository.markGroqInvalid()
+            if (valid && _uiState.value.groqInput.isNotBlank()) {
+                apiKeyRepository.saveGroqKey(key)
             }
         }
     }
@@ -276,20 +277,25 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun clearAllChats() {
-        viewModelScope.launch { chatRepository.clearAllChats() }
+        viewModelScope.launch {
+            chatRepository.clearAllChats()
+        }
     }
 
     fun clearSandboxSessions() {
-        viewModelScope.launch { sandboxRepository.clearAllSessions() }
+        viewModelScope.launch {
+            sandboxRepository.clearAllSessions()
+        }
     }
 
-    fun wipeEverything() {
+    fun clearAllData() {
         viewModelScope.launch {
             chatRepository.clearAllChats()
             sandboxRepository.clearAllSessions()
+            usageRepository.clearAll()
             apiKeyRepository.clearAllKeys()
-            settingsDataStore.clearAll()
             encryptedPrefs.clearAll()
+            settingsDataStore.clearAll()
         }
     }
 }

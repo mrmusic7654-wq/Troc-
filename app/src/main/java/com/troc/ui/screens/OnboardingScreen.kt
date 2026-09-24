@@ -1,8 +1,10 @@
 package com.troc.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -10,12 +12,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.troc.ui.components.VoiceOrb
-import com.troc.domain.model.VoiceStatus
+import com.troc.ui.components.ApiKeyField
 import com.troc.ui.theme.*
 import com.troc.viewmodel.OnboardingViewModel
 import com.google.accompanist.permissions.*
@@ -52,8 +57,7 @@ fun OnboardingScreen(
                     onGroqChange = { viewModel.updateGroqKey(it) },
                     onTestMistral = { viewModel.testMistral() },
                     onTestGroq = { viewModel.testGroq() },
-                    onNext = { viewModel.nextStep() },
-                    onSkipGroq = { viewModel.skipGroq() }
+                    onNext = { viewModel.nextStep() }
                 )
                 2 -> OnboardingStep3(onNext = { viewModel.nextStep() })
                 3 -> OnboardingStep4(
@@ -77,43 +81,61 @@ fun OnboardingScreen(
 fun OnboardingStep1(onNext: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "logo")
     val scale by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "scale"
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(120.dp)
+                .size(100.dp)
                 .scale(scale)
                 .background(
-                    Brush.linearGradient(listOf(PrimaryPurple, SecondaryCyan)),
+                    Brush.linearGradient(listOf(PrimaryPurple, PrimaryIndigo, SecondaryCyan)),
                     shape = RoundedCornerShape(28.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text("T", style = MaterialTheme.typography.displayLarge.copy(color = LightSurface, fontSize = androidx.compose.ui.unit.TextUnit.Unspecified, lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified), fontSize = 48.dp.let { androidx.compose.ui.unit.TextUnit(it.value, androidx.compose.ui.unit.TextUnitType.Sp) })
+            Text(
+                "T",
+                style = MaterialTheme.typography.displayLarge.copy(
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("Troc", style = MaterialTheme.typography.displayLarge, color = DarkText)
+        Spacer(modifier = Modifier.height(28.dp))
+        Text(
+            "Troc",
+            style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
+            color = DarkText
+        )
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Your AI Agent with Sandboxed Superpowers", style = MaterialTheme.typography.bodyMedium, color = DarkMuted)
+        Text(
+            "Your Autonomous AI Assistant & Sandbox",
+            style = MaterialTheme.typography.bodyLarge,
+            color = DarkMuted,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
         Spacer(modifier = Modifier.height(48.dp))
         Button(
             onClick = onNext,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp)
         ) {
-            Text("Get Started")
+            Text("Get Started", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
         }
     }
 }
@@ -130,60 +152,61 @@ fun OnboardingStep2(
     onGroqChange: (String) -> Unit,
     onTestMistral: () -> Unit,
     onTestGroq: () -> Unit,
-    onNext: () -> Unit,
-    onSkipGroq: () -> Unit
+    onNext: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         verticalArrangement = Arrangement.Top
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
-        Text("API Key Setup", style = MaterialTheme.typography.displayLarge, color = DarkText)
-        Text("Add your keys to unlock Troc's full power. Groq is optional for voice.", style = MaterialTheme.typography.bodyMedium, color = DarkMuted)
+        Spacer(modifier = Modifier.height(36.dp))
+        Text(
+            "Configure API Key",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            color = DarkText
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "Paste your Mistral API key to get started. You can also configure this later in Settings.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = DarkMuted
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
 
-        OutlinedTextField(
+        ApiKeyField(
+            label = "Mistral API Key",
             value = mistralKey,
+            maskedValue = if (mistralKey.isNotEmpty()) "••••••••" else "",
+            isValid = mistralValid,
+            isTesting = isTestingMistral,
             onValueChange = onMistralChange,
-            label = { Text("Mistral API Key") },
-            placeholder = { Text("•••• last 4 chars") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true
+            onTest = onTestMistral
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-            Button(onClick = onTestMistral, enabled = !isTestingMistral) {
-                if (isTestingMistral) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Test")
-            }
-            mistralValid?.let {
-                Text(if (it) "✅ Valid" else "❌ Invalid", color = if (it) TertiaryEmerald else ErrorRed)
-            }
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
+        ApiKeyField(
+            label = "Groq API Key (Optional for Voice)",
             value = groqKey,
+            maskedValue = if (groqKey.isNotEmpty()) "••••••••" else "",
+            isValid = groqValid,
+            isTesting = isTestingGroq,
             onValueChange = onGroqChange,
-            label = { Text("Groq API Key (for voice) — optional") },
-            placeholder = { Text("•••• optional") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            singleLine = true
+            onTest = onTestGroq
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-            Button(onClick = onTestGroq, enabled = !isTestingGroq) {
-                if (isTestingGroq) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Test Voice")
-            }
-            groqValid?.let {
-                Text(if (it) "✅ Valid" else "❌ Invalid", color = if (it) TertiaryEmerald else ErrorRed)
-            }
-            TextButton(onClick = onSkipGroq) { Text("Skip") }
-        }
 
         Spacer(modifier = Modifier.weight(1f))
-        Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) {
-            Text("Continue")
+
+        Button(
+            onClick = onNext,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text("Continue", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
         }
     }
 }
@@ -192,50 +215,104 @@ fun OnboardingStep2(
 fun OnboardingStep3(onNext: () -> Unit) {
     var currentSlide by remember { mutableStateOf(0) }
     val slides = listOf(
-        Triple("💬 Chat", "Streaming conversations with Mistral AI", Icons.Default.Chat),
-        Triple("🧪 Agent + Sandbox", "Run Python, JS, analyze CSVs, transform files — all sandboxed", Icons.Default.Code),
-        Triple("🎤 Voice Mode", "Hands-free conversations with Groq Whisper + PlayAI TTS", Icons.Default.Mic)
+        Triple("💬 Intelligent Chat", "Ultra-fast streaming conversations with Mistral models", Icons.Default.Chat),
+        Triple("🧪 Sandboxed Agent", "Autonomous code execution, data crunching, and file processing", Icons.Default.SmartToy),
+        Triple("🌐 Live Web Search", "Real-time answers cited with reliable sources", Icons.Default.Language),
+        Triple("🎙️ Voice Conversations", "Natural voice conversations with Groq Whisper STT", Icons.Default.Mic)
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Feature Tour", style = MaterialTheme.typography.displayLarge, color = DarkText)
-        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            "Features & Superpowers",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            color = DarkText
+        )
+        Spacer(modifier = Modifier.height(24.dp))
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurface)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            border = CardDefaults.outlinedCardBorder().copy(
+                brush = androidx.compose.ui.graphics.SolidColor(DarkBorder)
+            )
         ) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(slides[currentSlide].first, style = MaterialTheme.typography.titleLarge, color = DarkText)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(slides[currentSlide].second, style = MaterialTheme.typography.bodyMedium, color = DarkMuted)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            slides.forEachIndexed { index, _ ->
-                Box(
-                    modifier = Modifier.size(8.dp)
-                        .background(if (index == currentSlide) PrimaryPurple else DarkSurfaceVariant, RoundedCornerShape(4.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = slides[currentSlide].third,
+                    contentDescription = null,
+                    tint = PrimaryIndigo,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    slides[currentSlide].first,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = DarkText
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    slides[currentSlide].second,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = DarkMuted,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (currentSlide > 0) {
-                OutlinedButton(onClick = { currentSlide-- }) { Text("Back") }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            slides.forEachIndexed { index, _ ->
+                Box(
+                    modifier = Modifier
+                        .size(if (index == currentSlide) 18.dp else 8.dp, 8.dp)
+                        .background(
+                            if (index == currentSlide) PrimaryIndigo else DarkSurfaceVariant,
+                            RoundedCornerShape(4.dp)
+                        )
+                )
             }
-            if (currentSlide < slides.size - 1) {
-                Button(onClick = { currentSlide++ }) { Text("Next") }
-            } else {
-                Button(onClick = onNext) { Text("Continue") }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (currentSlide > 0) {
+                OutlinedButton(
+                    onClick = { currentSlide-- },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Back")
+                }
+            }
+            Button(
+                onClick = {
+                    if (currentSlide < slides.size - 1) currentSlide++
+                    else onNext()
+                },
+                modifier = Modifier.weight(1f).height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (currentSlide < slides.size - 1) "Next" else "Continue")
             }
         }
     }
@@ -249,30 +326,82 @@ fun OnboardingStep4(
     onSkip: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(64.dp), tint = PrimaryPurple)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Microphone Access", style = MaterialTheme.typography.displayLarge, color = DarkText)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Enable mic for voice chat. You can skip and enable later in settings.", style = MaterialTheme.typography.bodyMedium, color = DarkMuted)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (hasPermission) {
-            Text("✅ Permission granted", color = TertiaryEmerald)
-        } else {
-            Button(onClick = onRequestPermission, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) {
-                Text("Grant Microphone Permission")
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            TextButton(onClick = onSkip) { Text("Skip for now") }
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(SecondaryCyan.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = null,
+                tint = SecondaryCyan,
+                modifier = Modifier.size(40.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) {
-            Text("Enter Troc")
+
+        Text(
+            "Microphone Access",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            color = DarkText
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Enable voice mode to talk naturally with Troc hands-free.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = DarkMuted,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(36.dp))
+
+        if (!hasPermission) {
+            Button(
+                onClick = onRequestPermission,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Allow Microphone")
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onSkip) {
+                Text("Skip for now", color = DarkMuted)
+            }
+        } else {
+            Surface(
+                color = TertiaryEmerald.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = TertiaryEmerald)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Microphone permission granted", color = TertiaryEmerald, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onFinish,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text("Start Using Troc")
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -16,7 +17,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
-import kotlinx.coroutines.runBlocking
 
 class UnifiedAuthInterceptor(
     private val apiKeyRepository: ApiKeyRepository
@@ -28,25 +28,33 @@ class UnifiedAuthInterceptor(
             return chain.proceed(original)
         }
         val url = original.url.toString()
-        val key = runBlocking {
-            try {
+        val key = try {
+            runBlocking {
                 when {
-                    url.contains("mistral.ai") -> apiKeyRepository.getMistralKeySync()
-                    url.contains("groq.com") -> apiKeyRepository.getGroqKeySync()
-                    else -> null
+                    url.contains("groq.com", ignoreCase = true) -> apiKeyRepository.getGroqKeySync()
+                    else -> apiKeyRepository.getMistralKeySync()
                 }
-            } catch (e: Exception) {
-                null
             }
+        } catch (e: Exception) {
+            null
         }
-        val newRequest = if (!key.isNullOrBlank()) {
-            original.newBuilder()
-                .header("Authorization", "Bearer $key")
-                .build()
-        } else {
-            original
+
+        val cleanKey = key?.trim()
+            ?.removePrefix("Bearer ")
+            ?.removePrefix("bearer ")
+            ?.trim()
+            ?.removeSurrounding("\"")
+            ?.removeSurrounding("'")
+
+        val builder = original.newBuilder()
+        if (!cleanKey.isNullOrBlank()) {
+            builder.header("Authorization", "Bearer $cleanKey")
         }
-        return chain.proceed(newRequest)
+        if (original.header("Content-Type") == null && original.body != null) {
+            builder.header("Content-Type", "application/json")
+        }
+
+        return chain.proceed(builder.build())
     }
 }
 
@@ -70,8 +78,6 @@ object NetworkModule {
             .build()
     }
 
-    // No Hilt binding for no-auth client to avoid DuplicateBindings
-    // Validation creates its own client internally
     fun createNoAuthClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

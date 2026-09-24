@@ -1,25 +1,37 @@
 package com.troc.ui.components
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.troc.ui.theme.CodeBorder
 import com.troc.ui.theme.CodeSurface
 import com.troc.ui.theme.CodeText
+import com.troc.ui.theme.PrimaryIndigo
+import com.troc.ui.theme.TertiaryEmerald
+import kotlinx.coroutines.delay
 
 @Composable
 fun MarkdownMessage(
@@ -28,15 +40,12 @@ fun MarkdownMessage(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        // Simple detection of code blocks for custom rendering with copy button
-        // Fallback to simple Text rendering if richtext not available
         if (text.contains("```")) {
             val parts = splitByCodeBlocks(text)
             parts.forEach { part ->
                 if (part.isCodeBlock) {
-                    CodeBlockWithCopy(code = part.content, language = part.language)
-                } else {
-                    // Simple markdown-like rendering: handle bold, italics, lists via Text
+                    CodeBlockWithCopy(code = part.content.trim(), language = part.language)
+                } else if (part.content.isNotBlank()) {
                     SimpleMarkdownText(part.content)
                 }
             }
@@ -45,49 +54,110 @@ fun MarkdownMessage(
         }
 
         if (isStreaming) {
-            TypingIndicator(modifier = Modifier.padding(top = 4.dp))
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TypingIndicator()
+            }
         }
     }
 }
 
 @Composable
 fun SimpleMarkdownText(text: String) {
-    // Very basic markdown handling without external lib
-    // Handles **bold**, *italics*, `code`, - lists, # headers
-    Column {
-        text.lines().forEach { line ->
+    val lines = text.lines()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { rawLine ->
+            val line = rawLine.trimEnd()
             when {
-                line.startsWith("# ") -> {
+                line.startsWith("### ") -> {
                     Text(
-                        text = line.removePrefix("# ").trim(),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        text = line.removePrefix("### ").trim(),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
                     )
                 }
                 line.startsWith("## ") -> {
                     Text(
                         text = line.removePrefix("## ").trim(),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(vertical = 3.dp)
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
                     )
                 }
-                line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) {
-                        Text("• ", style = MaterialTheme.typography.bodyLarge)
+                line.startsWith("# ") -> {
+                    Text(
+                        text = line.removePrefix("# ").trim(),
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                    )
+                }
+                line.startsWith("- ") || line.startsWith("* ") || line.startsWith("• ") -> {
+                    val bulletContent = line.drop(2).trim()
+                    Row(
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Text(
-                            text = line.drop(2).trim().replaceBold().replaceCode(),
-                            style = MaterialTheme.typography.bodyLarge
+                            text = "•",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                color = PrimaryIndigo,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text(
+                            text = parseInlineMarkdown(bulletContent),
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 22.sp
+                            )
                         )
                     }
                 }
-                line.trim().isEmpty() -> {
-                    Spacer(modifier = Modifier.height(6.dp))
+                line.matches(Regex("""^\d+\.\s.*""")) -> {
+                    val num = line.substringBefore(".").trim()
+                    val rest = line.substringAfter(".").trim()
+                    Row(
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "$num.",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                color = PrimaryIndigo,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text(
+                            text = parseInlineMarkdown(rest),
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 22.sp
+                            )
+                        )
+                    }
+                }
+                line.isBlank() -> {
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
                 else -> {
                     Text(
-                        text = line.replaceBold().replaceCode(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        text = parseInlineMarkdown(line),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 22.sp
+                        )
                     )
                 }
             }
@@ -95,14 +165,50 @@ fun SimpleMarkdownText(text: String) {
     }
 }
 
-// Helper to strip markdown for simple display
-private fun String.replaceBold(): String {
-    return this.replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
-        .replace(Regex("\\*(.*?)\\*"), "$1")
-}
+private fun parseInlineMarkdown(text: String): AnnotatedString {
+    return buildAnnotatedString {
+        var cursor = 0
+        val regex = Regex("""(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)""")
+        val matches = regex.findAll(text).toList()
 
-private fun String.replaceCode(): String {
-    return this.replace(Regex("`([^`]+)`"), "$1")
+        for (match in matches) {
+            val start = match.range.first
+            val end = match.range.last + 1
+            if (start > cursor) {
+                append(text.substring(cursor, start))
+            }
+            val matchText = match.value
+            when {
+                matchText.startsWith("**") && matchText.endsWith("**") -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append(matchText.removeSurrounding("**"))
+                    }
+                }
+                matchText.startsWith("*") && matchText.endsWith("*") -> {
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                        append(matchText.removeSurrounding("*"))
+                    }
+                }
+                matchText.startsWith("`") && matchText.endsWith("`") -> {
+                    withStyle(
+                        SpanStyle(
+                            fontFamily = FontFamily.Monospace,
+                            background = Color(0x336366F1),
+                            color = Color(0xFF818CF8),
+                            fontSize = 13.sp
+                        )
+                    ) {
+                        append(" ${matchText.removeSurrounding("`")} ")
+                    }
+                }
+                else -> append(matchText)
+            }
+            cursor = end
+        }
+        if (cursor < text.length) {
+            append(text.substring(cursor))
+        }
+    }
 }
 
 private data class TextPart(
@@ -143,7 +249,7 @@ fun CodeBlockWithCopy(
 
     LaunchedEffect(copied) {
         if (copied) {
-            kotlinx.coroutines.delay(1500)
+            delay(1500)
             copied = false
         }
     }
@@ -152,67 +258,99 @@ fun CodeBlockWithCopy(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(CodeSurface)
+            .border(1.dp, CodeBorder, RoundedCornerShape(14.dp))
     ) {
         Column {
+            // Code header bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(CodeSurface.copy(alpha = 0.8f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .background(Color(0xFF0F172A))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = language.ifEmpty { "code" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CodeText.copy(alpha = 0.7f)
-                )
-                IconButton(
-                    onClick = {
-                        clipboard.setText(AnnotatedString(code))
-                        copied = true
-                    },
-                    modifier = Modifier.size(28.dp)
+                Surface(
+                    color = PrimaryIndigo.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy",
-                        tint = CodeText,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        text = language.ifEmpty { "code" }.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFA5B4FC)
+                        ),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                ) {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(code))
+                            copied = true
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        AnimatedContent(
+                            targetState = copied,
+                            label = "copyAnimation"
+                        ) { isCopied ->
+                            if (isCopied) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = TertiaryEmerald,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Copied",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TertiaryEmerald
+                                    )
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.ContentCopy,
+                                        contentDescription = "Copy",
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Copy",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
+            // Code Content
             Box(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(12.dp)
+                    .padding(14.dp)
             ) {
                 Text(
                     text = code,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
-                    lineHeight = 18.sp,
+                    lineHeight = 19.sp,
                     color = CodeText
-                )
-            }
-        }
-
-        if (copied) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primary
-            ) {
-                Text(
-                    text = "Copied!",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
         }

@@ -2,7 +2,7 @@ package com.troc.util
 
 object Constants {
     const val MISTRAL_BASE_URL = "https://api.mistral.ai/"
-    const val GROQ_BASE_URL = "https://api.groq.com/openai/"
+    const val GROQ_BASE_URL = "https://api.groq.com/openai/v1/"
     const val DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
     const val DEFAULT_GROQ_STT_MODEL = "whisper-large-v3"
     const val DEFAULT_GROQ_TTS_MODEL = "playai-tts"
