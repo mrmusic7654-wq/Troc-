@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+# Android
+*.apk
+*.aab
+# Secrets
+secrets.properties
+# Python
+__pycache__/
+*.pyc
+# OS
+.DS_Store
+Thumbs.db
